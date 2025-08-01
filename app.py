@@ -1,24 +1,26 @@
 # app.py
 
 from flask import Flask, jsonify, request
-from models import db, Tarea
+from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
+from models import db, Tarea, Usuario
 import os
+from datetime import timedelta
 
 app = Flask(__name__)
 
 # Configuración de la base de datos
-# SQLALCHEMY_DATABASE_URI: URL de conexión a la base de datos
-# 'sqlite:///tareas.db': crea un archivo tareas.db en el directorio actual
-# SQLite es perfecto para aprender porque no necesita servidor separado
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tareas.db'
-
-# SQLALCHEMY_TRACK_MODIFICATIONS: desactiva el tracking de modificaciones
-# Esto mejora el rendimiento y evita warnings
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-# Inicializar la base de datos con nuestra aplicación Flask
-# Esto conecta SQLAlchemy con Flask
+# Configuración de JWT
+# SECRET_KEY: clave secreta para firmar los tokens (en producción debe ser muy segura)
+app.config['JWT_SECRET_KEY'] = 'tu-clave-secreta-super-segura'
+# JWT_ACCESS_TOKEN_EXPIRES: tiempo de expiración del token (7 días)
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = timedelta(days=7)
+
+# Inicializar extensiones
 db.init_app(app)
+jwt = JWTManager(app)
 
 def validar_tarea(datos):
     """
@@ -50,113 +52,206 @@ def validar_tarea(datos):
     
     return True, "Datos válidos"
 
+def validar_usuario(datos):
+    """
+    Función de validación para datos de usuario
+    """
+    if not datos:
+        return False, "No se enviaron datos"
+    
+    if 'username' not in datos:
+        return False, "El campo 'username' es requerido"
+    
+    if 'email' not in datos:
+        return False, "El campo 'email' es requerido"
+    
+    if 'password' not in datos:
+        return False, "El campo 'password' es requerido"
+    
+    if not isinstance(datos['username'], str) or len(datos['username']) < 3:
+        return False, "El username debe tener al menos 3 caracteres"
+    
+    if not isinstance(datos['email'], str) or '@' not in datos['email']:
+        return False, "El email debe ser válido"
+    
+    if not isinstance(datos['password'], str) or len(datos['password']) < 6:
+        return False, "La contraseña debe tener al menos 6 caracteres"
+    
+    return True, "Datos válidos"
+
+@app.route('/registro', methods=['POST'])
+def registro():
+    """
+    Registrar un nuevo usuario
+    """
+    # Validar los datos de entrada
+    es_valido, mensaje = validar_usuario(request.json)
+    if not es_valido:
+        return jsonify({"error": mensaje}), 400
+    
+    # Verificar si el usuario ya existe
+    if Usuario.query.filter_by(username=request.json['username']).first():
+        return jsonify({"error": "El username ya está en uso"}), 400
+    
+    if Usuario.query.filter_by(email=request.json['email']).first():
+        return jsonify({"error": "El email ya está registrado"}), 400
+    
+    # Crear nuevo usuario
+    nuevo_usuario = Usuario(
+        username=request.json['username'],
+        email=request.json['email']
+    )
+    nuevo_usuario.set_password(request.json['password'])
+    
+    # Guardar en la base de datos
+    db.session.add(nuevo_usuario)
+    db.session.commit()
+    
+    return jsonify({
+        "mensaje": "Usuario registrado exitosamente",
+        "usuario": nuevo_usuario.to_dict()
+    }), 201
+
+@app.route('/login', methods=['POST'])
+def login():
+    """
+    Iniciar sesión de usuario
+    """
+    if not request.json:
+        return jsonify({"error": "No se enviaron datos"}), 400
+    
+    username = request.json.get('username')
+    password = request.json.get('password')
+    
+    if not username or not password:
+        return jsonify({"error": "Username y password son requeridos"}), 400
+    
+    # Buscar usuario por username
+    usuario = Usuario.query.filter_by(username=username).first()
+    
+    if not usuario or not usuario.check_password(password):
+        return jsonify({"error": "Username o password incorrectos"}), 401
+    
+    # Crear token de acceso
+    access_token = create_access_token(identity=usuario.id)
+    
+    return jsonify({
+        "mensaje": "Login exitoso",
+        "access_token": access_token,
+        "usuario": usuario.to_dict()
+    }), 200
+
 @app.route('/tareas', methods=['GET'])
+@jwt_required()
 def obtener_tareas():
     """
-    Obtener todas las tareas de la base de datos
+    Obtener todas las tareas del usuario autenticado
     """
-    # Tarea.query.all(): consulta SQL equivalente a "SELECT * FROM tareas"
-    # Esto trae todas las tareas de la base de datos
-    tareas = Tarea.query.all()
+    # get_jwt_identity(): obtiene el ID del usuario del token
+    usuario_id = get_jwt_identity()
     
-    # Convertimos cada tarea a diccionario usando el método to_dict()
-    # jsonify necesita diccionarios para convertirlos a JSON
+    # Buscar tareas del usuario específico
+    tareas = Tarea.query.filter_by(usuario_id=usuario_id).all()
+    
     return jsonify([tarea.to_dict() for tarea in tareas])
 
 @app.route('/tareas', methods=['POST'])
+@jwt_required()
 def agregar_tarea():
     """
-    Crear una nueva tarea en la base de datos
+    Crear una nueva tarea para el usuario autenticado
     """
     # Validar los datos de entrada
     es_valido, mensaje = validar_tarea(request.json)
     if not es_valido:
         return jsonify({"error": mensaje}), 400
     
-    # Crear una nueva instancia de Tarea
-    # Los campos id y fecha_creacion se llenan automáticamente
+    # Obtener ID del usuario autenticado
+    usuario_id = get_jwt_identity()
+    
+    # Crear nueva tarea
     nueva_tarea = Tarea(
         titulo=request.json['titulo'],
         descripcion=request.json['descripcion'],
-        completada=request.json.get('completada', False)  # Por defecto False
+        completada=request.json.get('completada', False),
+        usuario_id=usuario_id
     )
     
-    # Agregar la tarea a la base de datos
-    # db.session: maneja la sesión de la base de datos
-    # add(): agrega el objeto para ser guardado
-    # commit(): ejecuta la operación en la base de datos
+    # Guardar en la base de datos
     db.session.add(nueva_tarea)
     db.session.commit()
     
     return jsonify({
-        "mensaje": "Tarea agregada", 
+        "mensaje": "Tarea agregada",
         "tarea": nueva_tarea.to_dict()
     }), 201
 
 @app.route('/tareas/<int:tarea_id>', methods=['PUT'])
+@jwt_required()
 def actualizar_tarea(tarea_id):
     """
-    Actualizar una tarea existente en la base de datos
+    Actualizar una tarea del usuario autenticado
     """
     # Validar los datos de entrada
     es_valido, mensaje = validar_tarea(request.json)
     if not es_valido:
         return jsonify({"error": mensaje}), 400
     
-    # Buscar la tarea por ID
-    # Tarea.query.get(tarea_id): consulta SQL equivalente a "SELECT * FROM tareas WHERE id = tarea_id"
-    tarea = Tarea.query.get(tarea_id)
+    # Obtener ID del usuario autenticado
+    usuario_id = get_jwt_identity()
+    
+    # Buscar la tarea del usuario específico
+    tarea = Tarea.query.filter_by(id=tarea_id, usuario_id=usuario_id).first()
     
     if not tarea:
         return jsonify({"error": "Tarea no encontrada"}), 404
     
-    # Actualizar los campos de la tarea
+    # Actualizar campos
     tarea.titulo = request.json['titulo']
     tarea.descripcion = request.json['descripcion']
     tarea.completada = request.json.get('completada', tarea.completada)
     
-    # Guardar los cambios en la base de datos
+    # Guardar cambios
     db.session.commit()
     
     return jsonify({
-        "mensaje": "Tarea actualizada", 
+        "mensaje": "Tarea actualizada",
         "tarea": tarea.to_dict()
     }), 200
 
 @app.route('/tareas/<int:tarea_id>', methods=['DELETE'])
+@jwt_required()
 def eliminar_tarea(tarea_id):
     """
-    Eliminar una tarea de la base de datos
+    Eliminar una tarea del usuario autenticado
     """
-    # Buscar la tarea por ID
-    tarea = Tarea.query.get(tarea_id)
+    # Obtener ID del usuario autenticado
+    usuario_id = get_jwt_identity()
+    
+    # Buscar la tarea del usuario específico
+    tarea = Tarea.query.filter_by(id=tarea_id, usuario_id=usuario_id).first()
     
     if not tarea:
         return jsonify({"error": "Tarea no encontrada"}), 404
     
-    # Guardar una copia de la tarea antes de eliminarla (para la respuesta)
+    # Guardar copia antes de eliminar
     tarea_eliminada = tarea.to_dict()
     
-    # Eliminar la tarea de la base de datos
-    # db.session.delete(): marca el objeto para ser eliminado
-    # db.session.commit(): ejecuta la operación
+    # Eliminar tarea
     db.session.delete(tarea)
     db.session.commit()
     
     return jsonify({
-        "mensaje": "Tarea eliminada", 
+        "mensaje": "Tarea eliminada",
         "tarea": tarea_eliminada
     }), 200
 
 # Crear las tablas de la base de datos
-# Esto debe ejecutarse una sola vez al iniciar la aplicación
 def crear_tablas():
     """
     Crear todas las tablas definidas en los modelos
     """
     with app.app_context():
-        # db.create_all(): crea todas las tablas que no existen
-        # Es seguro ejecutarlo múltiples veces (no recrea tablas existentes)
         db.create_all()
         print("✅ Base de datos creada/verificada correctamente")
 
