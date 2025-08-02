@@ -133,7 +133,7 @@ def login():
         return jsonify({"error": "Username o password incorrectos"}), 401
     
     # Crear token de acceso
-    access_token = create_access_token(identity=usuario.id)
+    access_token = create_access_token(identity=str(usuario.id))
     
     return jsonify({
         "mensaje": "Login exitoso",
@@ -148,7 +148,7 @@ def obtener_tareas():
     Obtener todas las tareas del usuario autenticado
     """
     # get_jwt_identity(): obtiene el ID del usuario del token
-    usuario_id = get_jwt_identity()
+    usuario_id = int(get_jwt_identity())
     
     # Buscar tareas del usuario específico
     tareas = Tarea.query.filter_by(usuario_id=usuario_id).all()
@@ -245,6 +245,40 @@ def eliminar_tarea(tarea_id):
         "mensaje": "Tarea eliminada",
         "tarea": tarea_eliminada
     }), 200
+
+# ===========================================
+# MANEJO DE ERRORES
+# ===========================================
+
+@app.errorhandler(404)
+def not_found(error):
+    """
+    Maneja errores 404 - Recurso no encontrado
+    """
+    return jsonify({
+        "error": "Recurso no encontrado",
+        "mensaje": "La URL que buscas no existe"
+    }), 404
+
+@app.errorhandler(405)
+def method_not_allowed(error):
+    """
+    Maneja errores 405 - Método no permitido
+    """
+    return jsonify({
+        "error": "Método no permitido",
+        "mensaje": "El método HTTP que usaste no está permitido para esta URL"
+    }), 405
+
+@app.errorhandler(500)
+def internal_error(error):
+    """
+    Maneja errores 500 - Error interno del servidor
+    """
+    return jsonify({
+        "error": "Error interno del servidor",
+        "mensaje": "Algo salió mal en el servidor. Inténtalo de nuevo más tarde."
+    }), 500
 
 # Crear las tablas de la base de datos
 def crear_tablas():
