@@ -54,31 +54,73 @@ def validar_tarea(datos):
 
 def validar_usuario(datos):
     """
-    Función de validación para datos de usuario
+    Función de validación mejorada para datos de usuario
+    
+    Esta función verifica que todos los campos requeridos estén presentes
+    y que cumplan con las reglas de validación establecidas.
+    
+    Parámetros:
+    - datos: diccionario con los datos del usuario (username, email, password)
+    
+    Retorna:
+    - tupla (es_valido, mensaje): True si es válido, False si hay errores
     """
+    # Verificar que se enviaron datos
     if not datos:
         return False, "No se enviaron datos"
     
-    if 'username' not in datos:
-        return False, "El campo 'username' es requerido"
+    # Verificar que todos los campos requeridos estén presentes
+    campos_requeridos = ['username', 'email', 'password']
+    for campo in campos_requeridos:
+        if campo not in datos:
+            return False, f"El campo '{campo}' es requerido"
     
-    if 'email' not in datos:
-        return False, "El campo 'email' es requerido"
+    # Validar username
+    username = datos['username']
+    if not isinstance(username, str):
+        return False, "El username debe ser texto"
     
-    if 'password' not in datos:
-        return False, "El campo 'password' es requerido"
-    
-    if not isinstance(datos['username'], str) or len(datos['username']) < 3:
+    if len(username) < 3:
         return False, "El username debe tener al menos 3 caracteres"
     
-    if not isinstance(datos['email'], str) or '@' not in datos['email']:
-        return False, "El email debe ser válido"
+    if len(username) > 20:
+        return False, "El username no puede tener más de 20 caracteres"
     
-    if not isinstance(datos['password'], str) or len(datos['password']) < 6:
+    # Verificar que username solo contenga letras, números y guiones bajos
+    if not username.replace('_', '').isalnum():
+        return False, "El username solo puede contener letras, números y guiones bajos (_)"
+    
+    # Validar email
+    email = datos['email']
+    if not isinstance(email, str):
+        return False, "El email debe ser texto"
+    
+    # Validación básica de email (debe contener @ y un punto después del @)
+    if '@' not in email or '.' not in email.split('@')[1]:
+        return False, "El formato del email no es válido"
+    
+    # Validar password
+    password = datos['password']
+    if not isinstance(password, str):
+        return False, "La contraseña debe ser texto"
+    
+    if len(password) < 6:
         return False, "La contraseña debe tener al menos 6 caracteres"
     
+    if len(password) > 50:
+        return False, "La contraseña no puede tener más de 50 caracteres"
+    
+    # Verificar que la contraseña tenga al menos una letra y un número
+    tiene_letra = any(c.isalpha() for c in password)
+    tiene_numero = any(c.isdigit() for c in password)
+    
+    if not tiene_letra:
+        return False, "La contraseña debe contener al menos una letra"
+    
+    if not tiene_numero:
+        return False, "La contraseña debe contener al menos un número"
+    
     return True, "Datos válidos"
-
 @app.route('/registro', methods=['POST'])
 def registro():
     """
@@ -278,6 +320,42 @@ def internal_error(error):
     return jsonify({
         "error": "Error interno del servidor",
         "mensaje": "Algo salió mal en el servidor. Inténtalo de nuevo más tarde."
+    }), 500
+    
+# ===========================================
+# MANEJO DE ERRORES DE BASE DE DATOS
+# ===========================================
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """
+    Maneja errores generales no capturados, especialmente errores de base de datos
+    
+    Esta función se ejecuta cuando ocurre cualquier error que no fue manejado
+    por otros manejadores de errores específicos.
+    
+    Parámetros:
+    - e: el objeto de error que ocurrió
+    
+    Retorna:
+    - JSON con información del error y código de estado 500
+    """
+    # Imprimir el error en la consola para debugging
+    # En producción, esto debería ir a un archivo de log
+    print(f"❌ Error no manejado: {str(e)}")
+    print(f"🔍 Tipo de error: {type(e).__name__}")
+    
+    # Verificar si es un error específico de base de datos
+    if "database" in str(e).lower() or "sql" in str(e).lower():
+        mensaje_error = "Error en la base de datos. Por favor, inténtalo de nuevo."
+    else:
+        mensaje_error = "Ocurrió un error inesperado. Por favor, inténtalo de nuevo más tarde."
+    
+    # Retornar respuesta JSON con información del error
+    return jsonify({
+        "error": "Error interno del servidor",
+        "mensaje": mensaje_error,
+        "tipo": "error_interno"
     }), 500
 
 # Crear las tablas de la base de datos
