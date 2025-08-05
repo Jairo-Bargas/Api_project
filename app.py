@@ -121,6 +121,103 @@ def validar_usuario(datos):
         return False, "La contraseña debe contener al menos un número"
     
     return True, "Datos válidos"
+
+# ===========================================
+# VALIDACIÓN DE FORMATO JSON
+# ===========================================
+
+@app.before_request
+def validate_json():
+    """
+    Valida que las peticiones POST y PUT contengan JSON válido
+    
+    Esta función se ejecuta ANTES de cualquier ruta que maneje POST o PUT.
+    Si la petición no contiene JSON válido, retorna un error inmediatamente.
+    
+    ¿Por qué es importante?
+    - Evita errores cuando se envían datos en formato incorrecto
+    - Da mensajes de error claros al cliente
+    - Mejora la seguridad de la API
+    """
+    # Solo validar peticiones que envían datos (POST, PUT, PATCH)
+    if request.method in ['POST', 'PUT', 'PATCH']:
+        # Verificar si la petición tiene el header Content-Type correcto
+        if not request.is_json:
+            return jsonify({
+                "error": "Formato de datos incorrecto",
+                "mensaje": "La petición debe contener datos en formato JSON",
+                "tipo": "error_formato",
+                "detalle": "Asegúrate de enviar el header 'Content-Type: application/json'"
+            }), 400
+
+# ===========================================
+# MANEJO DE ERRORES JWT
+# ===========================================
+
+@jwt.expired_token_loader
+def expired_token_callback(jwt_header, jwt_payload):
+    """
+    Maneja tokens JWT expirados
+    
+    Esta función se ejecuta cuando alguien intenta usar un token que ya expiró.
+    En lugar de mostrar un error genérico, da un mensaje claro sobre qué pasó.
+    
+    Parámetros:
+    - jwt_header: información del header del token
+    - jwt_payload: información del contenido del token
+    
+    Retorna:
+    - JSON con mensaje de error y código 401 (No autorizado)
+    """
+    return jsonify({
+        "error": "Token expirado",
+        "mensaje": "Tu sesión ha expirado. Por favor, inicia sesión nuevamente.",
+        "tipo": "error_autenticacion",
+        "codigo": "token_expirado"
+    }), 401
+
+@jwt.invalid_token_loader
+def invalid_token_callback(error):
+    """
+    Maneja tokens JWT inválidos
+    
+    Esta función se ejecuta cuando el token tiene un formato incorrecto
+    o no puede ser verificado (firmado con clave incorrecta, etc.).
+    
+    Parámetros:
+    - error: información sobre el error específico
+    
+    Retorna:
+    - JSON con mensaje de error y código 401 (No autorizado)
+    """
+    return jsonify({
+        "error": "Token inválido",
+        "mensaje": "El token de autenticación no es válido.",
+        "tipo": "error_autenticacion",
+        "codigo": "token_invalido"
+    }), 401
+
+@jwt.unauthorized_loader
+def missing_token_callback(error):
+    """
+    Maneja cuando no se proporciona token JWT
+    
+    Esta función se ejecuta cuando se intenta acceder a una ruta protegida
+    sin enviar ningún token de autenticación.
+    
+    Parámetros:
+    - error: información sobre el error específico
+    
+    Retorna:
+    - JSON con mensaje de error y código 401 (No autorizado)
+    """
+    return jsonify({
+        "error": "Token requerido",
+        "mensaje": "Se requiere un token de autenticación para acceder a este recurso.",
+        "tipo": "error_autenticacion",
+        "codigo": "token_faltante"
+    }), 401
+
 @app.route('/registro', methods=['POST'])
 def registro():
     """
