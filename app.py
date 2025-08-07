@@ -280,18 +280,66 @@ def login():
         "usuario": usuario.to_dict()
     }), 200
 
+
+
 @app.route('/tareas', methods=['GET'])
 @jwt_required()
 def obtener_tareas():
     """
-    Obtener todas las tareas del usuario autenticado
+    Obtener tareas del usuario autenticado con búsqueda, filtros y ordenamiento
     """
-    # get_jwt_identity(): obtiene el ID del usuario del token
+    # Obtener parámetros de búsqueda y filtros de la URL
+    busqueda = request.args.get('busqueda', '').strip()
+    estado = request.args.get('estado', '').strip()
+    
+    # Obtener parámetros de ordenamiento de la URL
+    ordenar_por = request.args.get('ordenar_por', 'fecha_creacion').strip()
+    orden = request.args.get('orden', 'desc').strip()
+    
+    # Obtener ID del usuario autenticado
     usuario_id = int(get_jwt_identity())
     
-    # Buscar tareas del usuario específico
-    tareas = Tarea.query.filter_by(usuario_id=usuario_id).all()
+    # Query base: tareas del usuario
+    query = Tarea.query.filter_by(usuario_id=usuario_id)
     
+    # Aplicar filtro de búsqueda si se proporciona
+    if busqueda:
+        # Buscar en título Y descripción usando LIKE
+        query = query.filter(
+            db.or_(
+                Tarea.titulo.ilike(f'%{busqueda}%'),
+                Tarea.descripcion.ilike(f'%{busqueda}%')
+            )
+        )
+    
+    # Aplicar filtro de estado si se proporciona
+    if estado:
+        if estado.lower() == 'completada':
+            query = query.filter(Tarea.completada == True)
+        elif estado.lower() == 'pendiente':
+            query = query.filter(Tarea.completada == False)
+    
+    # Aplicar ordenamiento
+    if ordenar_por == 'titulo':
+        if orden.lower() == 'asc':
+            query = query.order_by(Tarea.titulo.asc())
+        else:
+            query = query.order_by(Tarea.titulo.desc())
+    elif ordenar_por == 'fecha_creacion':
+        if orden.lower() == 'asc':
+            query = query.order_by(Tarea.fecha_creacion.asc())
+        else:
+            query = query.order_by(Tarea.fecha_creacion.desc())
+    elif ordenar_por == 'estado':
+        if orden.lower() == 'asc':
+            query = query.order_by(Tarea.completada.asc())
+        else:
+            query = query.order_by(Tarea.completada.desc())
+    
+    # Ejecutar la consulta
+    tareas = query.all()
+    
+    # Devolver resultados como JSON
     return jsonify([tarea.to_dict() for tarea in tareas])
 
 @app.route('/tareas', methods=['POST'])

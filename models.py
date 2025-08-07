@@ -33,7 +33,7 @@ class Usuario(db.Model):
     
     # Relación con tareas: un usuario puede tener muchas tareas
     # backref='usuario': permite acceder al usuario desde una tarea
-    tareas = db.relationship('Tarea', backref='usuario', lazy=True, cascade='all, delete-orphan')
+    tareas = db.relationship('Tarea', backref='usuario', lazy=True, cascade='all, delete-orphan') #Lazy=true carga solo las tareas solo cuando se necesiten, backref deja que acceda a usuario desde tarea 
     
     def set_password(self, password):
         """
