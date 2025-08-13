@@ -250,7 +250,9 @@ def registro():
         "mensaje": "Usuario registrado exitosamente",
         "usuario": nuevo_usuario.to_dict()
     }), 201
-
+    
+    
+        
 @app.route('/login', methods=['POST'])
 def login():
     """
@@ -286,7 +288,7 @@ def login():
 @jwt_required()
 def obtener_tareas():
     """
-    Obtener tareas del usuario autenticado con búsqueda, filtros y ordenamiento
+    Obtener tareas del usuario autenticado con búsqueda, filtros, ordenamiento y paginación
     """
     # Obtener parámetros de búsqueda y filtros de la URL
     busqueda = request.args.get('busqueda', '').strip()
@@ -296,6 +298,10 @@ def obtener_tareas():
     ordenar_por = request.args.get('ordenar_por', 'fecha_creacion').strip()
     orden = request.args.get('orden', 'desc').strip()
     
+    # Obtener parámetros de paginación de la URL
+    pagina = request.args.get('pagina', '1').strip()
+    limite = request.args.get('limite', '10').strip()
+    
     # Obtener ID del usuario autenticado
     usuario_id = int(get_jwt_identity())
     
@@ -304,7 +310,6 @@ def obtener_tareas():
     
     # Aplicar filtro de búsqueda si se proporciona
     if busqueda:
-        # Buscar en título Y descripción usando LIKE
         query = query.filter(
             db.or_(
                 Tarea.titulo.ilike(f'%{busqueda}%'),
@@ -336,11 +341,73 @@ def obtener_tareas():
         else:
             query = query.order_by(Tarea.completada.desc())
     
-    # Ejecutar la consulta
+    # Validar y convertir parámetros de paginación
+    try:
+        pagina = int(pagina)
+        limite = int(limite)
+        
+        # Validar valores mínimos y máximos
+        if pagina < 1:
+            pagina = 1
+        if limite < 1 or limite > 100:
+            limite = 10
+            
+        # Calcular offset
+        offset = (pagina - 1) * limite
+        
+    except ValueError:
+        # Si los parámetros no son números válidos, usar valores por defecto
+        pagina = 1
+        limite = 10
+        offset = 0
+    
+    # Crear una copia de la query para contar el total
+    total_query = Tarea.query.filter_by(usuario_id=usuario_id)
+    
+    # Aplicar los mismos filtros a la query de conteo
+    if busqueda:
+        total_query = total_query.filter(
+            db.or_(
+                Tarea.titulo.ilike(f'%{busqueda}%'),
+                Tarea.descripcion.ilike(f'%{busqueda}%')
+            )
+        )
+    
+    if estado:
+        if estado.lower() == 'completada':
+            total_query = total_query.filter(Tarea.completada == True)
+        elif estado.lower() == 'pendiente':
+            total_query = total_query.filter(Tarea.completada == False)
+    
+    # Contar total de tareas (sin paginación)
+    total_tareas = total_query.count()
+    
+    # Aplicar paginación a la query principal
+    query = query.offset(offset).limit(limite)
+    
+    # Ejecutar la consulta paginada
     tareas = query.all()
     
-    # Devolver resultados como JSON
-    return jsonify([tarea.to_dict() for tarea in tareas])
+    # Calcular metadatos de paginación
+    total_paginas = (total_tareas + limite - 1) // limite
+    tiene_siguiente = pagina < total_paginas
+    tiene_anterior = pagina > 1
+    
+    # Preparar respuesta con metadatos
+    respuesta = {
+        "tareas": [tarea.to_dict() for tarea in tareas],
+        "paginacion": {
+            "pagina_actual": pagina,
+            "limite": limite,
+            "total_tareas": total_tareas,
+            "total_paginas": total_paginas,
+            "tiene_siguiente": tiene_siguiente,
+            "tiene_anterior": tiene_anterior
+        }
+    }
+    
+    return jsonify(respuesta)
+
 
 @app.route('/tareas', methods=['POST'])
 @jwt_required()
@@ -432,6 +499,38 @@ def eliminar_tarea(tarea_id):
         "mensaje": "Tarea eliminada",
         "tarea": tarea_eliminada
     }), 200
+    
+@app.route('/usuarios', methods=['GET'])
+def obtener_usuarios():
+    """
+    Obtenemos usuarios registrados
+    """
+    try:
+        usuarios = Usuario.query.all()
+        
+        lista_usuarios = []
+        for usuario in usuarios:
+            lista_usuarios.append({
+                'id': usuario.id,
+                'username': usuario.username,
+                'email': usuario.email,
+                'fecha_registro': usuario.fecha_registro.isoformat() if usuario.fecha_registro else None
+                
+            })
+        # Devolver respuesta exitosa
+        return jsonify({
+            "mensaje": "Usuarios obtenidos exitosamente",
+            "total_usuarios": len(lista_usuarios),
+            "usuarios": lista_usuarios
+        }), 200
+        
+    except Exception as e:
+        # En caso de error, devolver mensaje de error
+        return jsonify({
+            "error": "Error al obtener usuarios",
+            "mensaje": str(e)
+        }), 500
+        
 
 # ===========================================
 # MANEJO DE ERRORES
