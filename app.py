@@ -622,6 +622,25 @@ def crear_tablas():
         db.create_all()
         print("✅ Base de datos creada/verificada correctamente")
 
+# Crear las tablas de la base de datos al iniciar
+with app.app_context():
+    db.create_all()
+    print("✅ Base de datos creada/verificada correctamente")
+    
+    
+    # Crear usuario de prueba si no existe
+    usuario_existente = Usuario.query.filter_by(username='testuser').first()
+    if not usuario_existente:
+        from werkzeug.security import generate_password_hash
+        usuario_prueba = Usuario(
+            username='testuser',
+            email='test@example.com',
+            password_hash=generate_password_hash('123456')
+        )
+        db.session.add(usuario_prueba)
+        db.session.commit()
+        print("✅ Usuario de prueba creado: testuser / 123456")
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port, debug=False)
