@@ -3,6 +3,8 @@
 
 # Base de datos SQLite
 *.db
+instance/*.db
+
 
 # Carpeta de instancia Flask (configuraciones locales)
 instance/

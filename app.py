@@ -5,8 +5,19 @@ from flask_jwt_extended import JWTManager, create_access_token, jwt_required, ge
 from models import db, Tarea, Usuario
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
 
+# Cargar variables de entorno desde archivo .env
+load_dotenv()
+
+# Configuración de la aplicación
 app = Flask(__name__)
+
+# Configurar variables desde entorno
+app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'clave_por_defecto')
+app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///tareas.db')
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+app.config['JWT_SECRET_KEY'] = os.environ.get('JWT_SECRET_KEY', 'jwt_clave_por_defecto')
 
 # Configuración de la base de datos
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///tareas.db'
