@@ -1,3 +1,17 @@
-venv/
+# Variables de entorno (no subir a GitHub)
+.env
+
+# Base de datos SQLite
+*.db
+
+# Carpeta de instancia Flask (configuraciones locales)
+instance/
+
+# Archivos de Python
 __pycache__/
 *.pyc
+*.pyo
+
+# Entorno virtual
+venv/
+.venv/
