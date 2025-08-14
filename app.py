@@ -623,8 +623,5 @@ def crear_tablas():
         print("✅ Base de datos creada/verificada correctamente")
 
 if __name__ == '__main__':
-    # Crear las tablas antes de iniciar el servidor
-    crear_tablas()
-    
-    # Iniciar el servidor Flask
-    app.run(debug=True, host="0.0.0.0")
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
