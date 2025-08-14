@@ -6,12 +6,18 @@ from models import db, Tarea, Usuario
 import os
 from datetime import timedelta
 from dotenv import load_dotenv
+from flask_cors import CORS
+
+
+# Configuración de la aplicación
+app = Flask(__name__)
+
+# Habilitar CORS para todos los endpoints
+CORS(app, origins=["*"])
 
 # Cargar variables de entorno desde archivo .env
 load_dotenv()
 
-# Configuración de la aplicación
-app = Flask(__name__)
 
 # Configurar variables desde entorno
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'clave_por_defecto')
